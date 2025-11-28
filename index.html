@@ -1,173 +1,280 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Darkroom Simulation</title>
+<meta charset="UTF-8" />
+<title>Darkroom Simulation Game</title>
+
 <style>
-body { margin:0; background:#000; overflow:hidden; font-family:Arial; color:white; }
-canvas { display:block; margin:0 auto; background:#111; }
-#lives, #score, #shield { position:absolute; top:10px; font-size:20px; padding:5px; }
-#lives { left:10px; }
-#score { right:10px; }
-#shield { top:40px; left:10px; }
-#questionBox, #titleScreen, #controlsScreen {
-  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-  background:#222; padding:20px; border-radius:10px; display:none; width:60%; text-align:center;
-}
-.choice { background:#333; padding:10px; margin:10px 0; border-radius:8px; cursor:pointer; }
-.choice:hover { background:#444; }
-button { padding:10px 20px; font-size:18px; margin-top:10px; cursor:pointer; }
-#phoneOverlay {
-  position:absolute; bottom:10px; right:10px; width:120px; height:200px;
-  background-size:cover;
-}
+  body { margin: 0; background: #000; overflow: hidden; }
+  canvas { background: #111; display: block; margin: 0 auto; }
+
+  /* ---------- TITLE SCREEN ---------- */
+  #titleScreen {
+    position: absolute; width:100%; height:100%; top:0; left:0;
+    background:#000; color:white; display:flex; flex-direction:column;
+    justify-content:center; align-items:center; font-family:Arial;
+    z-index: 10;
+  }
+  #titleScreen h1 { font-size:40px; }
+  #titleScreen button { padding:10px 20px; font-size:20px; cursor:pointer; }
+
+  /* ---------- QUESTION BOX ---------- */
+  #questionBox {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: #222;
+    padding: 25px;
+    width: 70%;
+    max-width: 700px;
+    border-radius: 12px;
+    border: 3px solid #666;
+    color: white;
+    font-family: Arial;
+    display: none;
+    z-index: 20;
+  }
+
+  #qText {
+    margin-bottom: 20px;
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .choice {
+    background: #333;
+    padding: 15px;
+    margin: 12px 0;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 20px;
+  }
+  .choice:hover { background:#555; }
+
+  #lives {
+    position:absolute; top:10px; left:10px;
+    color:white; font-family:Arial; font-size:22px;
+    z-index: 5;
+  }
+
+  #phoneOverlay {
+    position:absolute; bottom:10px; right:10px;
+    width:120px; height:200px;
+    background:url('phone.png');
+    background-size:cover;
+    z-index: 5;
+  }
 </style>
 </head>
 <body>
 
-<canvas id="gameCanvas" width="900" height="900"></canvas>
-
-<div id="lives">Lives: 3</div>
-<div id="score">Score: 0</div>
-<div id="shield">Shield: 0</div>
-
+<!-- TITLE SCREEN -->
 <div id="titleScreen">
   <h1>October/November Book Project</h1>
   <h2>Darkroom Simulation</h2>
   <p>Created by: Jay Gowda</p>
-  <button onclick="showControls()">Start</button>
+  <button onclick="startGame()">Start</button>
 </div>
 
-<div id="controlsScreen">
-  <h2>Controls & Mechanics</h2>
-  <p>Arrow keys → Move player</p>
-  <p>Collide with ghosts → Answer a question</p>
-  <p>3 correct answers in a row → Earn a shield</p>
-  <button onclick="startGame()">Play Game</button>
-</div>
+<!-- GAME CANVAS -->
+<canvas id="gameCanvas" width="900" height="900"></canvas>
+<div id="lives">Lives: 3</div>
+<div id="phoneOverlay"></div>
 
+<!-- QUESTION BOX -->
 <div id="questionBox">
   <div id="qText"></div>
   <div id="choices"></div>
 </div>
 
-<div id="phoneOverlay"></div>
-
 <script>
-// ===== Base64 Images =====
-let ghostImg = new Image();
-ghostImg.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAK0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAgG8GFgABHMXdUAAAAABJRU5ErkJggg=="; // red circle placeholder
-let phoneImg = new Image();
-phoneImg.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHwAAABACAYAAAC+qZ3LAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAH0lEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAwNY4HwAAH3GG3UAAAAASUVORK5CYII="; // phone placeholder
-document.getElementById("phoneOverlay").style.backgroundImage = "url('"+phoneImg.src+"')";
+/* ---------- SETUP ---------- */
 
-// ===== Audio =====
-let jumpScare = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-
-// ===== Game variables =====
 let canvas = document.getElementById("gameCanvas");
 let ctx = canvas.getContext("2d");
 
-let player = {x:450, y:450, size:25, speed:5};
+let player = { x:450, y:450, size:25, speed:5 };
 let ghosts = [];
-let lives = 3, score = 0, streak = 0, shields = 0;
+let lives = 3;
 let quizActive = false;
 
-// ===== Questions =====
-const questions=[
-  {q:"What is the main object in Darkroom?",c:["Camera","Flashlight","Phone","Notebook"],a:0},
-  {q:"Why does the main character go into the darkroom?",c:["Hide","Take Photos","Investigate","Find a Friend"],a:2},
-  {q:"What emotion dominates the story?",c:["Happiness","Fear","Anger","Excitement"],a:1},
-  {q:"What is unusual about the photos?",c:["They show ghosts","They turn white","They burn","They disappear"],a:0},
-  {q:"Where does the main event occur?",c:["Hallway","Basement","Outside","Darkroom"],a:3}
+let snd = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+
+let rooms = [
+  {x:50,y:50,w:350,h:350},
+  {x:500,y:50,w:350,h:350},
+  {x:50,y:500,w:350,h:350},
+  {x:500,y:500,w:350,h:350}
 ];
 
-// ===== Spawn Ghosts =====
-function spawnGhosts() {
-  ghosts = [];
+/* ---------- START GAME ---------- */
+function startGame(){
+  document.getElementById("titleScreen").style.display = "none";
+  spawnGhosts();
+  gameLoop();
+}
+
+/* ---------- GHOSTS ---------- */
+function spawnGhosts(){
   for(let i=0;i<5;i++){
-    ghosts.push({x:Math.random()*850, y:Math.random()*850, dx:(Math.random()*2-1)*2, dy:(Math.random()*2-1)*2, size:50});
+    ghosts.push({
+      x: Math.random()*800+50,
+      y: Math.random()*800+50,
+      size: 20,
+      dx: Math.random()*2-1,
+      dy: Math.random()*2-1
+    });
   }
 }
 
-// ===== Controls =====
-let keys = {};
-document.addEventListener("keydown", e => { keys[e.key] = true; });
-document.addEventListener("keyup", e => { keys[e.key] = false; });
+function animateGhosts(){
+  ghosts.forEach(g=>{
+    g.x += g.dx;
+    g.y += g.dy;
 
-function movePlayer() {
+    if(g.x < 0 || g.x > 900) g.dx *= -1;
+    if(g.y < 0 || g.y > 900) g.dy *= -1;
+  });
+}
+
+/* ---------- MOVEMENT ---------- */
+let keys = {};
+
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+function movePlayer(){
   if(quizActive) return;
+
   if(keys["ArrowUp"]) player.y -= player.speed;
   if(keys["ArrowDown"]) player.y += player.speed;
   if(keys["ArrowLeft"]) player.x -= player.speed;
   if(keys["ArrowRight"]) player.x += player.speed;
-  player.x = Math.max(0, Math.min(canvas.width-player.size, player.x));
-  player.y = Math.max(0, Math.min(canvas.height-player.size, player.y));
 }
 
-// ===== Ghost Animation =====
-function animateGhosts(){
-  ghosts.forEach(g=>{
-    g.x += g.dx; g.y += g.dy;
-    if(g.x<0 || g.x>canvas.width-g.size) g.dx*=-1;
-    if(g.y<0 || g.y>canvas.height-g.size) g.dy*=-1;
+/* ---------- QUESTIONS ---------- */
+
+const questions = [
+  {
+    q: "Why does Riley start using the darkroom?",
+    c: [
+      "To explore strange figures appearing in her photos",
+      "To learn film photography for fun",
+      "Because her teacher assigned it",
+      "To avoid being around her family"
+    ],
+    a: 0
+  },
+  {
+    q: "What appears in Riley’s photos that scares her?",
+    c: [
+      "A shadowy figure",
+      "A bright flash of light",
+      "Distorted landscapes",
+      "Her camera lens cracking"
+    ],
+    a: 0
+  },
+  {
+    q: "Where does most of the investigation take place?",
+    c: ["The cafeteria","The darkroom","The library","Outside the school"],
+    a: 1
+  },
+  {
+    q: "What emotion does Riley feel as the ghost images increase?",
+    c: ["Excitement","Confusion","Fear","Calmness"],
+    a: 2
+  },
+  {
+    q: "What device helps Riley understand the ghostly images?",
+    c: ["Her phone","A flashlight","A thermometer","A video camera"],
+    a: 0
+  },
+  {
+    q: "What does the mysterious figure in the photos seem to want?",
+    c: ["To warn Riley","To harm her","To steal her camera","Nothing"],
+    a: 0
+  }
+];
+
+/* ---------- QUESTION BOX ---------- */
+
+function showQuestion(){
+  quizActive = true;
+  snd.play();
+
+  let q = questions[Math.floor(Math.random()*questions.length)];
+
+  let qb = document.getElementById("questionBox");
+  qb.style.display = "block";
+
+  document.getElementById("qText").innerText = q.q;
+
+  let cBox = document.getElementById("choices");
+  cBox.innerHTML = "";
+
+  q.c.forEach((choice, i)=>{
+    let div = document.createElement("div");
+    div.className = "choice";
+    div.innerText = choice;
+    div.onclick = ()=>handleAnswer(i === q.a);
+    cBox.appendChild(div);
   });
 }
 
-// ===== Collision & Question =====
+function handleAnswer(correct){
+  if(!correct){
+    lives--;
+    document.getElementById("lives").innerText = "Lives: " + lives;
+
+    if(lives <= 0){
+      alert("GAME OVER!");
+      location.reload();
+    }
+  }
+
+  document.getElementById("questionBox").style.display = "none";
+  quizActive = false;
+}
+
+/* ---------- COLLISION ---------- */
 function checkCollision(){
   if(quizActive) return;
+
   ghosts.forEach(g=>{
     let dx = player.x - g.x;
     let dy = player.y - g.y;
-    if(Math.sqrt(dx*dx + dy*dy) < player.size+g.size/2){
-      jumpScare.play();
+    let d = Math.sqrt(dx*dx + dy*dy);
+
+    if(d < 35){
       showQuestion();
     }
   });
 }
 
-function showQuestion(){
-  quizActive = true;
-  let q = questions[Math.floor(Math.random()*questions.length)];
-  document.getElementById("qText").innerText = q.q;
-  let cBox = document.getElementById("choices");
-  cBox.innerHTML = "";
-  q.c.forEach((choice,i)=>{
-    let div = document.createElement("div");
-    div.className = "choice";
-    div.innerText = choice;
-    div.onclick = ()=> handleAnswer(i===q.a);
-    cBox.appendChild(div);
-  });
-  document.getElementById("questionBox").style.display="block";
-}
-
-function handleAnswer(correct){
-  if(correct){
-    score++; streak++;
-    if(streak%3===0){ shields++; alert("Shield earned!"); }
-  } else {
-    if(shields>0){ shields--; alert("Shield protected you!"); } 
-    else { lives--; if(lives<=0){alert("GAME OVER! Score: "+score); location.reload();} }
-    streak=0;
-  }
-  document.getElementById("score").innerText="Score: "+score;
-  document.getElementById("lives").innerText="Lives: "+lives;
-  document.getElementById("shield").innerText="Shield: "+shields;
-  document.getElementById("questionBox").style.display="none"; quizActive=false;
-}
-
-// ===== Draw =====
+/* ---------- DRAW ---------- */
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="cyan"; ctx.fillRect(player.x,player.y,player.size,player.size);
+  ctx.clearRect(0,0,900,900);
+
+  rooms.forEach(r=>{
+    ctx.fillStyle = "#222";
+    ctx.fillRect(r.x,r.y,r.w,r.h);
+  });
+
+  ctx.fillStyle = "cyan";
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+
+  ctx.fillStyle = "red";
   ghosts.forEach(g=>{
-    ctx.drawImage(ghostImg,g.x,g.y,g.size,g.size);
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.size, 0, Math.PI*2);
+    ctx.fill();
   });
 }
 
-// ===== Game Loop =====
+/* ---------- GAME LOOP ---------- */
 function gameLoop(){
   movePlayer();
   animateGhosts();
@@ -175,21 +282,6 @@ function gameLoop(){
   draw();
   requestAnimationFrame(gameLoop);
 }
-
-// ===== Start / Controls =====
-function showControls(){
-  document.getElementById("titleScreen").style.display="none";
-  document.getElementById("controlsScreen").style.display="block";
-}
-
-function startGame(){
-  document.getElementById("controlsScreen").style.display="none";
-  spawnGhosts();
-  gameLoop();
-}
-
-// ===== Show title screen initially =====
-document.getElementById("titleScreen").style.display="block";
 </script>
 </body>
 </html>
